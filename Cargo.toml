@@ -2,6 +2,6 @@
 name = "gs-xml-parser"
 version = "0.1.0"
 edition = "2024"
-
+description = "basic xml parser for personal projects"
 
 [dependencies]
