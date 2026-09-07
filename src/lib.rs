@@ -1,5 +1,7 @@
 //what the fuck
 
+mod test;
+
 use std::collections::BTreeMap;
 
 // Handles Tag parsing, attributes, text, CDATA, comments, PI.
@@ -8,7 +10,7 @@ use std::collections::BTreeMap;
 pub enum Node {
     Element {
         tag: String,
-        attributes: BTreeMap<String, String>, // sorted -> deterministic pretty-print
+        attributes: BTreeMap<String, String>, // sorted -> formatt
         children: Vec<Node>,
     },
     Text(String),
@@ -42,7 +44,7 @@ pub enum XmlError {
     Syntax { line: usize, col: usize, message: String },
     MismatchedTag { line: usize, col: usize, expected: String, found: String },
 }
-
+// Error print
 impl std::fmt::Display for XmlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -58,8 +60,7 @@ impl std::fmt::Display for XmlError {
     }
 }
 
-// Wraps the input + a char cursor and does line/col bookkeeping in one place,
-// instead of every call site pairing `chars.next()` with a manual `update_pos`.
+//acts as a cursor for interpreter, sorta like vim ig?
 struct Scanner<'a> {
     input: &'a str,
     chars: std::iter::Peekable<std::str::CharIndices<'a>>,
@@ -80,7 +81,7 @@ impl<'a> Scanner<'a> {
         self.chars.peek().map(|&(i, _)| i)
     }
 
-    // Consume one char, updating line/col, and return it.
+    // Consumes char, updating line/col, and return char.
     fn advance(&mut self) -> Option<char> {
         let (_, c) = self.chars.next()?;
         if c == '\n' {
@@ -92,9 +93,6 @@ impl<'a> Scanner<'a> {
         Some(c)
     }
 
-    // Skip forward to (not including) the given absolute byte offset,
-    // keeping line/col in sync. Used after we've located a delimiter
-    // (e.g. "-->", "]]>", "?>") via string search.
     fn skip_to_byte(&mut self, target: usize) {
         while let Some(pos) = self.peek_byte_pos() {
             if pos >= target {
@@ -122,7 +120,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
         let i = sc.peek_byte_pos().unwrap();
 
         if ch != '<' {
-            // Text node: everything up to the next '<'.
+            // node = everything up to the next '<'.
             let mut text = String::new();
             while let Some(c) = sc.peek() {
                 if c == '<' {
@@ -138,7 +136,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
         }
 
         sc.advance(); // consume '<'
-
+        //comment
         if sc.starts_with(i, "<!--") {
             for _ in 0..3 { sc.advance(); } // consume "!--"
             let start = i + 4;
@@ -148,6 +146,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
             let content = input[start..end].to_string();
             sc.skip_to_byte(end + 3);
             tokens.push(Token { kind: TokenKind::Comment(content), line: cur_line, column: cur_col });
+        //CDATA
         } else if sc.starts_with(i, "<![CDATA[") {
             for _ in 0..8 { sc.advance(); } // consume "![CDATA["
             let start = i + 9;
@@ -157,6 +156,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
             let content = input[start..end].to_string();
             sc.skip_to_byte(end + 3);
             tokens.push(Token { kind: TokenKind::CData(content), line: cur_line, column: cur_col });
+        //Processing instructions
         } else if sc.starts_with(i, "<?") {
             sc.advance(); // consume '?'
             let start = i + 2;
@@ -164,9 +164,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
                 line: cur_line, col: cur_col, message: "Unclosed PI".into(),
             })?;
 
-            // NOTE: original code parsed target/content here, then overwrote
-            // `target` with a byte offset before using it -- discarding the
-            // real PI name. Fixed: keep the parsed strings.
+            // output ProcessingInstruction for scanned <?...?>
             let raw = &input[start..end];
             let mut parts = raw.splitn(2, char::is_whitespace);
             let target = parts.next().unwrap_or("").to_string();
@@ -178,6 +176,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
                 line: cur_line,
                 column: cur_col,
             });
+        //custom elements in the xml
         } else if sc.starts_with(i, "</") {
             sc.advance(); // consume '/'
             let mut tag = String::new();
@@ -202,7 +201,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, XmlError> {
                 sc.advance();
             }
             tokens.push(Token { kind: TokenKind::TagOpen(name), line: cur_line, column: cur_col });
-
+            //does syntax
             loop {
                 while let Some(c) = sc.peek() {
                     if !c.is_whitespace() { break; }
@@ -366,6 +365,7 @@ pub fn pretty_print(nodes: &[Node], indent_level: usize) -> String {
     out
 }
 
+// stops xml from picking them up as syntax statements instead of text
 fn escape_attr(input: &str) -> String {
     input
         .replace('&', "&amp;")
