@@ -1,5 +1,3 @@
-//what the fuck
-
 mod test;
 
 use std::collections::BTreeMap;
