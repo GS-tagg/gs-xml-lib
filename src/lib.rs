@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 pub enum Node {
     Element {
         tag: String,
-        attributes: BTreeMap<String, String>, // sorted -> formatt
+        attributes: BTreeMap<String, String>, // sorted -> format
         children: Vec<Node>,
     },
     Text(String),
